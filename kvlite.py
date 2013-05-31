@@ -46,7 +46,6 @@ import json
 import zlib
 import uuid
 import sqlite3
-import binascii
 import cPickle as pickle
 
 __all__ = ['open', 'remove',]
@@ -246,7 +245,12 @@ class BaseCollectionManager(object):
 
     def close(self):
         ''' close connection to database '''
-        self._conn.close()
+        try:
+            self._conn.close()
+        except:
+            pass
+
+    __del__ = close
 
 # -----------------------------------------------------------------
 # MysqlCollectionManager class
@@ -322,7 +326,6 @@ class SqliteCollectionManager(BaseCollectionManager):
     def __init__(self, uri):
         
         params = self.parse_uri(uri) 
-        
         self._conn = sqlite3.connect(params['db'])       
         self._conn.text_factory = str
 
@@ -388,7 +391,10 @@ class BaseCollection(object):
 
     def close(self):
         ''' close connection to database '''
-        self._conn.close()
+        try:
+            self._conn.close()
+        except:
+            pass
 
     __del__ = close
     
@@ -444,7 +450,7 @@ class MysqlCollection(BaseCollection):
             raise RuntimeError('The key length is more than 40 bytes')
         SQL = 'SELECT k,v FROM %s WHERE k = ' % self._collection
         try:
-            self._cursor.execute(SQL + "%s", binascii.a2b_hex(k))
+            self._cursor.execute(SQL + "%s", k)
         except Exception, err:
             raise RuntimeError(err)
         result = self._cursor.fetchone()
@@ -465,7 +471,7 @@ class MysqlCollection(BaseCollection):
         SQL_INSERT = 'INSERT INTO %s (k,v) ' % self._collection
         SQL_INSERT += 'VALUES (%s,%s) ON DUPLICATE KEY UPDATE v=%s;;'
         v = self._serializer.dumps(v)
-        self._cursor.execute(SQL_INSERT, (binascii.a2b_hex(k), v, v))
+        self._cursor.execute(SQL_INSERT, (k, v, v))
 
     def delete(self, k):
         ''' delete document by k '''
@@ -473,7 +479,7 @@ class MysqlCollection(BaseCollection):
             raise RuntimeError('The length of key is more than 40 bytes')
 
         SQL_DELETE = '''DELETE FROM %s WHERE k = ''' % self._collection
-        self._cursor.execute(SQL_DELETE + "%s;", binascii.a2b_hex(k))
+        self._cursor.execute(SQL_DELETE + "%s;", k)
 
     def keys(self):
         ''' return document keys in collection'''
@@ -541,7 +547,7 @@ class SqliteCollection(BaseCollection):
                     raise RuntimeError('key %s, %s' % (k, err))
                 yield (k, v)
 
-    def get(self):
+    def get(self, k):
         ''' 
         return document by key from collection 
         return documents if key is not defined

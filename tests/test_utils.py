@@ -1,6 +1,7 @@
 import sys
 if '' not in sys.path:
     sys.path.append('')
+sys.path.append('../')
 
 import kvlite
 import unittest
@@ -14,7 +15,7 @@ class KvliteUtilsTests(unittest.TestCase):
 
     def test_sqlite_open(self):
         
-        collection = kvlite.open('sqlite://tests/db/testdb.sqlite:kvlite_test')
+        collection = kvlite.open('sqlite://testdb.sqlite:kvlite_test')
         collection.put('a',1)
         self.assertEqual(collection.count,1)
         self.assertEqual(collection.get('a'), ('a',1))
@@ -25,7 +26,7 @@ class KvliteUtilsTests(unittest.TestCase):
     
     def test_sqlite_remove(self):
         
-        kvlite.remove('sqlite://tests/db/testdb.sqlite:kvlite_test')
+        kvlite.remove('sqlite://testdb.sqlite:kvlite_test')
 
     def test_mysql_open(self):
         pass

@@ -1,6 +1,7 @@
 import sys
 if '' not in sys.path:
     sys.path.append('')
+sys.path.append('..')
 
 import kvlite
 import unittest
@@ -11,11 +12,11 @@ from kvlite import MysqlCollectionManager
 from kvlite import cPickleSerializer
 from kvlite import CompressedJsonSerializer
 
-
+URI = 'mysql://test:test@localhost/yescustom'
 class KvliteMysqlTests(unittest.TestCase):
 
     def setUp(self):
-        URI = 'mysql://kvlite_test:eixaaghiequ6ZeiBahn0@localhost/kvlite_test'
+        
 
         self.collection_name = 'kvlite_test'
         self.manager = MysqlCollectionManager(URI)
@@ -57,7 +58,7 @@ class KvliteMysqlTests(unittest.TestCase):
             self.collection.put(k, v)
             ks.append(k)
         
-        kvs = [kv[0] for kv in self.collection.get()]
+        kvs = [kv[0] for kv in self.collection]
         self.assertEqual(len(kvs), 100)
 
         kvs = [kv for kv in self.collection.keys()]
@@ -78,13 +79,8 @@ class KvliteMysqlTests(unittest.TestCase):
     def test_absent_key(self):
         
         self.assertEqual(self.collection.get(u'a1b2c3'), (None,None))
-    
-    def test_incorrect_key(self):
-
-        self.assertRaises(RuntimeError, self.collection.get, '12345')
         
     def test_use_different_serializators_for_many(self):
-        URI = 'mysql://kvlite_test:eixaaghiequ6ZeiBahn0@localhost/kvlite_test'
         collection_name = 'diffser'
 
         manager = MysqlCollectionManager(URI)
@@ -104,7 +100,7 @@ class KvliteMysqlTests(unittest.TestCase):
         collection_class = manager.collection_class
         collection = collection_class(manager.connection, collection_name, cPickleSerializer)
         with self.assertRaises(RuntimeError):
-            res = [(k,v) for k,v in collection.get()]
+            res = [(k,v) for k,v in collection]
         
         collection.put(u'11', u'diffser1')
         collection.put(u'22', u'diffser2')
@@ -117,7 +113,7 @@ class KvliteMysqlTests(unittest.TestCase):
         collection = collection_class(manager.connection, collection_name, CompressedJsonSerializer)
         
         with self.assertRaises(RuntimeError):
-            res = [(k,v) for k,v in collection.get()]
+            res = [(k,v) for k,v in collection]
         collection.close()
         
                 
