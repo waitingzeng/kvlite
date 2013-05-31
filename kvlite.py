@@ -389,6 +389,11 @@ class BaseCollection(object):
     def close(self):
         ''' close connection to database '''
         self._conn.close()
+
+    __del__ = close
+    
+
+
     
 # -----------------------------------------------------------------
 # MysqlCollection class
@@ -412,7 +417,7 @@ class MysqlCollection(BaseCollection):
                 self._uuid_cache.append(u)
         return self._uuid_cache.pop()
 
-    def _get_many(self):
+    def items(self):
         ''' return all docs '''
         rowid = 0
         while True:
@@ -431,27 +436,24 @@ class MysqlCollection(BaseCollection):
                     raise RuntimeError('key %s, %s' % (k, err))
                 yield (k, v)
 
-    def get(self, k=None):
+    def get(self, k):
         ''' 
         return document by key from collection 
-        return documents if key is not defined
         '''
-        if k:
-            if len(k) > 40:
-                raise RuntimeError('The key length is more than 40 bytes')
-            SQL = 'SELECT k,v FROM %s WHERE k = ' % self._collection
-            try:
-                self._cursor.execute(SQL + "%s", binascii.a2b_hex(k))
-            except Exception, err:
-                raise RuntimeError(err)
-            result = self._cursor.fetchone()
-            if result:
-                v = self._serializer.loads(result[1])
-                return (binascii.b2a_hex(result[0]), v)
-            else:
-                return (None, None)
+        if len(k) > 40:
+            raise RuntimeError('The key length is more than 40 bytes')
+        SQL = 'SELECT k,v FROM %s WHERE k = ' % self._collection
+        try:
+            self._cursor.execute(SQL + "%s", binascii.a2b_hex(k))
+        except Exception, err:
+            raise RuntimeError(err)
+        result = self._cursor.fetchone()
+        if result:
+            v = self._serializer.loads(result[1])
+            return (binascii.b2a_hex(result[0]), v)
         else:
-            return self._get_many()            
+            return (None, None)
+             
 
     def put(self, k, v):
         ''' put document in collection '''
@@ -488,6 +490,12 @@ class MysqlCollection(BaseCollection):
                 k = binascii.b2a_hex(r[1])
                 yield k
 
+    __getitem__ = get
+    __iter__ = items
+    __setitem__ = put
+    __delitem__ = delete
+
+
 # -----------------------------------------------------------------
 # SqliteCollection class
 # -----------------------------------------------------------------
@@ -514,7 +522,7 @@ class SqliteCollection(BaseCollection):
         v = self._serializer.dumps(v)
         self._cursor.execute(SQL_INSERT, (k, v))
 
-    def _get_many(self):
+    def items(self):
         ''' return all docs '''
         rowid = 0
         while True:
@@ -533,30 +541,27 @@ class SqliteCollection(BaseCollection):
                     raise RuntimeError('key %s, %s' % (k, err))
                 yield (k, v)
 
-    def get(self, k=None):
+    def get(self):
         ''' 
         return document by key from collection 
         return documents if key is not defined
         '''
-        if k:
-            if len(k) > 40:
-                raise RuntimeError('The key length is more than 40 bytes')
-            SQL = 'SELECT k,v FROM %s WHERE k = ?;' % self._collection
+        if len(k) > 40:
+            raise RuntimeError('The key length is more than 40 bytes')
+        SQL = 'SELECT k,v FROM %s WHERE k = ?;' % self._collection
+        try:
+            self._cursor.execute(SQL, (k,))
+        except Exception, err:
+            raise RuntimeError(err)
+        result = self._cursor.fetchone()
+        if result:
             try:
-                self._cursor.execute(SQL, (k,))
+                v = self._serializer.loads(result[1])
             except Exception, err:
-                raise RuntimeError(err)
-            result = self._cursor.fetchone()
-            if result:
-                try:
-                    v = self._serializer.loads(result[1])
-                except Exception, err:
-                    raise RuntimeError('key %s, %s' % (k, err))
-                return (result[0], v)
-            else:
-                return (None, None)
+                raise RuntimeError('key %s, %s' % (k, err))
+            return (result[0], v)
         else:
-            return self._get_many()            
+            return (None, None)         
 
     def keys(self):
         ''' return document keys in collection'''
@@ -579,4 +584,8 @@ class SqliteCollection(BaseCollection):
         SQL_DELETE = '''DELETE FROM %s WHERE k = ?;''' % self._collection
         self._cursor.execute(SQL_DELETE, (k,))
                     
+    __getitem__ = get
+    __iter__ = items
+    __setitem__ = put
+    __delitem__ = delete
 
