@@ -299,7 +299,7 @@ class MysqlCollectionManager(BaseCollectionManager):
 
         SQL_CREATE_TABLE = '''CREATE TABLE IF NOT EXISTS %s (
                                 __rowid__ INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                                k BINARY(20) NOT NULL, 
+                                k varchar(40) NOT NULL, 
                                 v MEDIUMBLOB,
                                 UNIQUE KEY (k) ) ENGINE=InnoDB;'''
                                 
@@ -429,7 +429,7 @@ class MysqlCollection(BaseCollection):
                 break
             for r in result:
                 rowid = r[0]
-                k = binascii.b2a_hex(r[1])
+                k = r[1]
                 try:
                     v = self._serializer.loads(r[2])
                 except Exception, err:
@@ -450,7 +450,7 @@ class MysqlCollection(BaseCollection):
         result = self._cursor.fetchone()
         if result:
             v = self._serializer.loads(result[1])
-            return (binascii.b2a_hex(result[0]), v)
+            return result[0], v
         else:
             return (None, None)
              
@@ -487,7 +487,7 @@ class MysqlCollection(BaseCollection):
                 break
             for r in result:
                 rowid = r[0]
-                k = binascii.b2a_hex(r[1])
+                k = r[1]
                 yield k
 
     __getitem__ = get
