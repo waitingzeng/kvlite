@@ -381,6 +381,21 @@ class BaseCollection(object):
         self._cursor.execute('SELECT count(*) FROM %s;' % self._collection)
         return int(self._cursor.fetchone()[0])
 
+    def exists(self, k):
+        SQL = 'SELECT count(*) FROM %s WHERE k = ' % self._collection
+        try:
+            self._cursor.execute(SQL + "%s", k)
+        except Exception, err:
+            raise RuntimeError(err)
+        result = self._cursor.fetchone()
+        if result:
+            return int(result[0])
+        else:
+            return 0
+
+    __contains__ = exists
+        
+
     def commit(self):
         self._conn.commit()
 
@@ -436,7 +451,7 @@ class MysqlCollection(BaseCollection):
                     raise RuntimeError('key %s, %s' % (k, err))
                 yield (k, v)
 
-    def get(self, k):
+    def get(self, k, default=None):
         ''' 
         return document by key from collection 
         '''
@@ -450,9 +465,9 @@ class MysqlCollection(BaseCollection):
         result = self._cursor.fetchone()
         if result:
             v = self._serializer.loads(result[1])
-            return result[0], v
+            return v
         else:
-            return (None, None)
+            return default
              
 
     def put(self, k, v):
@@ -559,9 +574,9 @@ class SqliteCollection(BaseCollection):
                 v = self._serializer.loads(result[1])
             except Exception, err:
                 raise RuntimeError('key %s, %s' % (k, err))
-            return (result[0], v)
+            return v
         else:
-            return (None, None)         
+            return None  
 
     def keys(self):
         ''' return document keys in collection'''
