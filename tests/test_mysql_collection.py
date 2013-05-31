@@ -12,7 +12,7 @@ from kvlite import MysqlCollectionManager
 from kvlite import cPickleSerializer
 from kvlite import CompressedJsonSerializer
 
-URI = 'mysql://test:test@localhost/yescustom'
+URI = 'mysql://root:846266@localhost/yescustom'
 class KvliteMysqlTests(unittest.TestCase):
 
     def setUp(self):

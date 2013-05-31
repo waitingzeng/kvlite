@@ -218,7 +218,10 @@ class BaseCollectionManager(object):
     def __init__(self, connection):
         ''' init '''
         self._conn = connection
-        self._cursor = self._conn.cursor()
+
+    @property
+    def cursor(self):
+        return self._conn.cursor()
 
     @property
     def connection(self):
@@ -227,19 +230,22 @@ class BaseCollectionManager(object):
     
     def _collections(self, sql):
         ''' return collection list'''
-        self._cursor.execute(sql)
-        return [t[0] for t in self._cursor.fetchall()]
+        cursor = self.cursor
+        cursor.execute(sql)
+        return [t[0] for t in cursor.fetchall()]
 
     def _create(self, sql_create_table, name):
         ''' create collection by name '''
-        self._cursor.execute(sql_create_table % name)
-        self._conn.commit()
+        cursor = self.cursor
+        cursor.execute(sql_create_table % name)
+        conn.commit()
 
     def remove(self, name):
         ''' remove collection '''
+        cursor = self.cursor
         if name in self.collections():
-            self._cursor.execute('DROP TABLE %s;' % name)
-            self._conn.commit()
+            cursor.execute('DROP TABLE %s;' % name)
+            conn.commit()
         else:
             raise RuntimeError('No collection with name: {}'.format(name))
 
@@ -303,9 +309,9 @@ class MysqlCollectionManager(BaseCollectionManager):
 
         SQL_CREATE_TABLE = '''CREATE TABLE IF NOT EXISTS %s (
                                 __rowid__ INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                                k varchar(40) NOT NULL, 
+                                k varchar(80) NOT NULL, 
                                 v MEDIUMBLOB,
-                                UNIQUE KEY (k) ) ENGINE=InnoDB;'''
+                                UNIQUE KEY (k) ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;;'''
                                 
         self._create(SQL_CREATE_TABLE, name)
 
@@ -374,17 +380,21 @@ class BaseCollection(object):
     def __init__(self, connection, collection_name, serializer=cPickleSerializer):
 
         self._conn = connection
-        self._cursor = self._conn.cursor()
         self._collection = collection_name
         self._serializer = serializer
 
         self._uuid_cache = list()
 
     @property
+    def cursor(self):
+        return self._conn.cursor()
+
+    @property
     def count(self):
         ''' return amount of documents in collection'''
-        self._cursor.execute('SELECT count(*) FROM %s;' % self._collection)
-        return int(self._cursor.fetchone()[0])
+        cursor = self.cursor
+        cursor.execute('SELECT count(*) FROM %s;' % self._collection)
+        return int(cursor.fetchone()[0])
 
     def commit(self):
         self._conn.commit()
@@ -413,10 +423,10 @@ class MysqlCollection(BaseCollection):
         than global function - get_uuid()
         
         return id based on uuid """
-
+        cursor = self.cursor
         if not self._uuid_cache:
-            self._cursor.execute('SELECT %s;' % ','.join(['uuid()' for _ in range(100)]))
-            for uuid in self._cursor.fetchone():
+            cursor.execute('SELECT %s;' % ','.join(['uuid()' for _ in range(100)]))
+            for uuid in cursor.fetchone():
                 u = uuid.split('-')
                 u.reverse()
                 u = ("%040s" % ''.join(u)).replace(' ','0')
@@ -426,11 +436,12 @@ class MysqlCollection(BaseCollection):
     def items(self):
         ''' return all docs '''
         rowid = 0
+        cursor = self.cursor
         while True:
             SQL_SELECT_MANY = 'SELECT __rowid__, k,v FROM %s WHERE __rowid__ > %d LIMIT 1000 ;'
             SQL_SELECT_MANY %=  (self._collection, rowid)
-            self._cursor.execute(SQL_SELECT_MANY)
-            result = self._cursor.fetchall()
+            cursor.execute(SQL_SELECT_MANY)
+            result = cursor.fetchall()
             if not result:
                 break
             for r in result:
@@ -446,14 +457,15 @@ class MysqlCollection(BaseCollection):
         ''' 
         return document by key from collection 
         '''
-        if len(k) > 40:
+        if len(k) > 80:
             raise RuntimeError('The key length is more than 40 bytes')
         SQL = 'SELECT k,v FROM %s WHERE k = ' % self._collection
+        cursor = self.cursor
         try:
-            self._cursor.execute(SQL + "%s", k)
+            cursor.execute(SQL + "%s", k)
         except Exception, err:
             raise RuntimeError(err)
-        result = self._cursor.fetchone()
+        result = cursor.fetchone()
         if result:
             v = self._serializer.loads(result[1])
             return result[0], v
@@ -471,7 +483,7 @@ class MysqlCollection(BaseCollection):
         SQL_INSERT = 'INSERT INTO %s (k,v) ' % self._collection
         SQL_INSERT += 'VALUES (%s,%s) ON DUPLICATE KEY UPDATE v=%s;;'
         v = self._serializer.dumps(v)
-        self._cursor.execute(SQL_INSERT, (k, v, v))
+        self.cursor.execute(SQL_INSERT, (k, v, v))
 
     def delete(self, k):
         ''' delete document by k '''
@@ -479,16 +491,17 @@ class MysqlCollection(BaseCollection):
             raise RuntimeError('The length of key is more than 40 bytes')
 
         SQL_DELETE = '''DELETE FROM %s WHERE k = ''' % self._collection
-        self._cursor.execute(SQL_DELETE + "%s;", k)
+        self.cursor.execute(SQL_DELETE + "%s;", k)
 
     def keys(self):
         ''' return document keys in collection'''
         rowid = 0
+        cursor = self.cursor
         while True:
             SQL_SELECT_MANY = 'SELECT __rowid__, k FROM %s WHERE __rowid__ > %d LIMIT 1000 ;'
             SQL_SELECT_MANY %= (self._collection, rowid)
-            self._cursor.execute(SQL_SELECT_MANY)
-            result = self._cursor.fetchall()
+            cursor.execute(SQL_SELECT_MANY)
+            result = cursor.fetchall()
             if not result:
                 break
             for r in result:
@@ -526,16 +539,17 @@ class SqliteCollection(BaseCollection):
         SQL_INSERT = 'INSERT OR REPLACE INTO %s (k,v) ' % self._collection
         SQL_INSERT += 'VALUES (?,?)'
         v = self._serializer.dumps(v)
-        self._cursor.execute(SQL_INSERT, (k, v))
+        self.cursor.execute(SQL_INSERT, (k, v))
 
     def items(self):
         ''' return all docs '''
         rowid = 0
+        cursor = self.cursor
         while True:
             SQL_SELECT_MANY = 'SELECT rowid, k,v FROM %s WHERE rowid > %d LIMIT 1000 ;'
             SQL_SELECT_MANY %= (self._collection, rowid)
-            self._cursor.execute(SQL_SELECT_MANY)
-            result = self._cursor.fetchall()
+            cursor.execute(SQL_SELECT_MANY)
+            result = cursor.fetchall()
             if not result:
                 break
             for r in result:
@@ -555,11 +569,12 @@ class SqliteCollection(BaseCollection):
         if len(k) > 40:
             raise RuntimeError('The key length is more than 40 bytes')
         SQL = 'SELECT k,v FROM %s WHERE k = ?;' % self._collection
+        cursor = self.cursor
         try:
-            self._cursor.execute(SQL, (k,))
+            cursor.execute(SQL, (k,))
         except Exception, err:
             raise RuntimeError(err)
-        result = self._cursor.fetchone()
+        result = cursor.fetchone()
         if result:
             try:
                 v = self._serializer.loads(result[1])
@@ -572,11 +587,12 @@ class SqliteCollection(BaseCollection):
     def keys(self):
         ''' return document keys in collection'''
         rowid = 0
+        cursor = self.cursor
         while True:
             SQL_SELECT_MANY = 'SELECT rowid, k FROM %s WHERE rowid > %d LIMIT 1000 ;'
             SQL_SELECT_MANY %= (self._collection, rowid)
-            self._cursor.execute(SQL_SELECT_MANY)
-            result = self._cursor.fetchall()
+            cursor.execute(SQL_SELECT_MANY)
+            result = cursor.fetchall()
             if not result:
                 break
             for r in result:
@@ -588,7 +604,7 @@ class SqliteCollection(BaseCollection):
         if len(k) > 40:
             raise RuntimeError('The key length is more than 40 bytes')
         SQL_DELETE = '''DELETE FROM %s WHERE k = ?;''' % self._collection
-        self._cursor.execute(SQL_DELETE, (k,))
+        self.cursor.execute(SQL_DELETE, (k,))
                     
     __getitem__ = get
     __iter__ = items
