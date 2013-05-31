@@ -16,9 +16,9 @@ URI = 'mysql://root:846266@localhost/yescustom'
 class KvliteMysqlTests(unittest.TestCase):
 
     def setUp(self):
-        
-
+        self.collection = kvlite.open(URI + '.kvlite_test')
         self.collection_name = 'kvlite_test'
+        return
         self.manager = MysqlCollectionManager(URI)
         
         if self.collection_name not in self.manager.collections():
@@ -72,9 +72,9 @@ class KvliteMysqlTests(unittest.TestCase):
 
     def test_long_key(self):
         
-        self.assertRaises(RuntimeError, self.collection.get, '1'*41)
-        self.assertRaises(RuntimeError, self.collection.put, '1'*41, 'long_key')
-        self.assertRaises(RuntimeError, self.collection.delete, '1'*41)
+        self.assertRaises(RuntimeError, self.collection.get, '1'*81)
+        self.assertRaises(RuntimeError, self.collection.put, '1'*81, 'long_key')
+        self.assertRaises(RuntimeError, self.collection.delete, '1'*81)
     
     def test_absent_key(self):
         
@@ -104,7 +104,7 @@ class KvliteMysqlTests(unittest.TestCase):
         
         collection.put(u'11', u'diffser1')
         collection.put(u'22', u'diffser2')
-        collection.put(u'33', u'diffser3')
+        collection.put(u'open_id_aaaa', u'1111')
         collection.commit()
         collection.close()
 
