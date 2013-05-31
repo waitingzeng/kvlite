@@ -238,14 +238,14 @@ class BaseCollectionManager(object):
         ''' create collection by name '''
         cursor = self.cursor
         cursor.execute(sql_create_table % name)
-        conn.commit()
+        self._conn.commit()
 
     def remove(self, name):
         ''' remove collection '''
         cursor = self.cursor
         if name in self.collections():
             cursor.execute('DROP TABLE %s;' % name)
-            conn.commit()
+            self._conn.commit()
         else:
             raise RuntimeError('No collection with name: {}'.format(name))
 
