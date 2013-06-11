@@ -297,7 +297,7 @@ class MysqlCollectionManager(BaseCollectionManager):
     def create(self, name):
         ''' create collection '''
 
-        SQL_CREATE_TABLE = '''CREATE TABLE IF NOT EXISTS %s (
+        SQL_CREATE_TABLE = '''CREATE TABLE IF NOT EXISTS %%s (
                                 __rowid__ INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                                 k varchar(%s) NOT NULL, 
                                 v MEDIUMBLOB,
