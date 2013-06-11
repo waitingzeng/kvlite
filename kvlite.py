@@ -298,7 +298,7 @@ class MysqlCollectionManager(BaseCollectionManager):
 
         SQL_CREATE_TABLE = '''CREATE TABLE IF NOT EXISTS %s (
                                 __rowid__ INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                                k varchar(80) NOT NULL, 
+                                k varchar(256) NOT NULL, 
                                 v MEDIUMBLOB,
                                 UNIQUE KEY (k) ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;;'''
                                 
