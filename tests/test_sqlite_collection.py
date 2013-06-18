@@ -1,7 +1,7 @@
 import sys
 if '' not in sys.path:
     sys.path.append('')
-
+sys.path.append('..')
 
 import unittest
 
@@ -15,7 +15,7 @@ from kvlite import CompressedJsonSerializer
 class KvliteSqliteTests(unittest.TestCase):
 
     def setUp(self):
-        URI = 'sqlite://tests/db/testdb.sqlite'
+        URI = 'sqlite:///tmp/testdb.sqlite'
 
         self.collection_name = 'kvlite_test'
         self.manager = SqliteCollectionManager(URI)
@@ -24,7 +24,7 @@ class KvliteSqliteTests(unittest.TestCase):
             self.manager.create(self.collection_name)
             
         collection_class = self.manager.collection_class
-        self.collection = collection_class(self.manager.connection, self.collection_name)
+        self.collection = collection_class(self.manager, self.collection_name)
 
     def tearDown(self):
         
@@ -37,7 +37,7 @@ class KvliteSqliteTests(unittest.TestCase):
         k = self.collection.get_uuid()
         v = 'test_put_one'
         self.collection.put(k, v)
-        self.assertEqual(self.collection.get(k), (k,v))
+        self.assertEqual(self.collection.get(k), v)
         self.assertEqual(self.collection.count, 1)
         self.collection.delete(k)
         self.assertEqual(self.collection.count, 0)
@@ -52,7 +52,7 @@ class KvliteSqliteTests(unittest.TestCase):
             self.collection.put(k, v)
             ks.append(k)
         
-        kvs = [kv[0] for kv in self.collection.get()]
+        kvs = [kv[0] for kv in self.collection.items()]
         self.assertEqual(len(kvs), 100)
 
         kvs = [kv for kv in self.collection.keys()]
@@ -66,12 +66,12 @@ class KvliteSqliteTests(unittest.TestCase):
 
     def test_long_key(self):
         
-        self.assertRaises(RuntimeError, self.collection.get, '1'*41)
-        self.assertRaises(RuntimeError, self.collection.put, '1'*41, 'long_key')
-        self.assertRaises(RuntimeError, self.collection.delete, '1'*41)
+        self.assertRaises(RuntimeError, self.collection.get, '1'*256)
+        self.assertRaises(RuntimeError, self.collection.put, '1'*256, 'long_key')
+        self.assertRaises(RuntimeError, self.collection.delete, '1'*256)
 
     def test_use_different_serializators(self):
-        URI = 'sqlite://tests/db/testdb.sqlite'
+        URI = 'sqlite:///tmp/testdb.sqlite'
         collection_name = 'diffser'
 
         manager = SqliteCollectionManager(URI)
@@ -79,7 +79,7 @@ class KvliteSqliteTests(unittest.TestCase):
             manager.create(collection_name)
 
         collection_class = manager.collection_class
-        collection = collection_class(manager.connection, collection_name, CompressedJsonSerializer)
+        collection = collection_class(manager, collection_name, CompressedJsonSerializer)
         
         collection.put(u'1', u'diffser')
         collection.commit()
@@ -87,7 +87,7 @@ class KvliteSqliteTests(unittest.TestCase):
 
         manager = SqliteCollectionManager(URI)
         collection_class = manager.collection_class
-        collection = collection_class(manager.connection, collection_name, cPickleSerializer)
+        collection = collection_class(manager, collection_name, cPickleSerializer)
         
         self.assertRaises(RuntimeError, collection.get, u'1')
         collection.put(u'1', u'diffser')
@@ -96,13 +96,13 @@ class KvliteSqliteTests(unittest.TestCase):
 
         manager = SqliteCollectionManager(URI)
         collection_class = manager.collection_class
-        collection = collection_class(manager.connection, collection_name, CompressedJsonSerializer)
+        collection = collection_class(manager, collection_name, CompressedJsonSerializer)
         
         self.assertRaises(RuntimeError, collection.get, u'1')
         collection.close()
 
     def test_use_different_serializators_for_many(self):
-        URI = 'sqlite://tests/db/testdb.sqlite'
+        URI = 'sqlite:///tmp/testdb.sqlite'
         collection_name = 'diffser'
 
         manager = SqliteCollectionManager(URI)
@@ -110,7 +110,7 @@ class KvliteSqliteTests(unittest.TestCase):
             manager.create(collection_name)
 
         collection_class = manager.collection_class
-        collection = collection_class(manager.connection, collection_name, CompressedJsonSerializer)
+        collection = collection_class(manager, collection_name, CompressedJsonSerializer)
         
         collection.put(u'1', u'diffser1')
         collection.put(u'2', u'diffser2')
@@ -120,9 +120,9 @@ class KvliteSqliteTests(unittest.TestCase):
 
         manager = SqliteCollectionManager(URI)
         collection_class = manager.collection_class
-        collection = collection_class(manager.connection, collection_name, cPickleSerializer)
+        collection = collection_class(manager, collection_name, cPickleSerializer)
         with self.assertRaises(RuntimeError):
-            res = [(k,v) for k,v in collection.get()]
+            res = [(k,v) for k,v in collection.items()]
         
         collection.put(u'1', u'diffser1')
         collection.put(u'2', u'diffser2')
@@ -132,10 +132,10 @@ class KvliteSqliteTests(unittest.TestCase):
 
         manager = SqliteCollectionManager(URI)
         collection_class = manager.collection_class
-        collection = collection_class(manager.connection, collection_name, CompressedJsonSerializer)
+        collection = collection_class(manager, collection_name, CompressedJsonSerializer)
         
         with self.assertRaises(RuntimeError):
-            res = [(k,v) for k,v in collection.get()]
+            res = [(k,v) for k,v in collection.items()]
         collection.close()
 
 

@@ -45,22 +45,24 @@ import sys
 import json
 import zlib
 import uuid
+import time
+import logging
 import sqlite3
 import cPickle as pickle
 
-__all__ = ['open', 'remove',]
+__all__ = ['open', 'remove', ]
 
 try:
     import MySQLdb
 except ImportError:
     pass
-    
+
 SUPPORTED_BACKENDS = ['mysql', 'sqlite', ]
 MAX_KEY_LENGTH = 255
 
 '''
-A collection is a group of documents stored in kvlite2, 
-and can be thought of as roughly the equivalent of a 
+A collection is a group of documents stored in kvlite2,
+and can be thought of as roughly the equivalent of a
 table in a relational database.
 
 For using JSON as serialization
@@ -74,7 +76,9 @@ For using JSON as serialization
 # cPickleSerializer class
 # -----------------------------------------------------------------
 
+
 class cPickleSerializer(object):
+
     ''' cPickleSerializer '''
 
     @staticmethod
@@ -93,7 +97,9 @@ class cPickleSerializer(object):
 # CompressedJsonSerializer class
 # -----------------------------------------------------------------
 
+
 class CompressedJsonSerializer(object):
+
     ''' CompressedJsonSerializer '''
 
     # TODO issue: sqlite doesn't support binary values
@@ -109,7 +115,7 @@ class CompressedJsonSerializer(object):
         return json.loads(zlib.decompress(v))
 
 # -----------------------------------------------------------------
-# SERIALIZERS 
+# SERIALIZERS
 # -----------------------------------------------------------------
 
 SERIALIZERS = {
@@ -122,13 +128,13 @@ SERIALIZERS = {
 # KVLite utils
 # -----------------------------------------------------------------
 def open(uri, serializer=cPickleSerializer):
-    ''' 
-    open collection by URI, 
+    '''
+    open collection by URI,
     if collection does not exist kvlite will try to create it
-    
-    in case of successful opening or creation new collection 
+
+    in case of successful opening or creation new collection
     return Collection object
-    
+
     serializer: the class or module to serialize msgs with, must have
     methods or functions named ``dumps`` and ``loads``,
     `pickle <http://docs.python.org/library/pickle.html>`_ is the default,
@@ -136,44 +142,49 @@ def open(uri, serializer=cPickleSerializer):
     integers, etc)
     '''
     # TODO save kvlite configuration in database
-    
+
     manager = CollectionManager(uri)
     params = manager.parse_uri(uri)
     if params['collection'] not in manager.collections():
         manager.create(params['collection'])
-    return manager.collection_class(manager.connection, params['collection'], serializer)
+    return manager.collection_class(manager, params['collection'], serializer)
+
 
 def remove(uri):
     '''
     remove collection by URI
-    ''' 
+    '''
     manager = CollectionManager(uri)
     params = manager.parse_uri(uri)
     if params['collection'] in manager.collections():
         manager.remove(params['collection'])
 
+
 def get_uuid(amount=100):
     ''' return UUIDs '''
-    
+
     # TODO check another approach for generation UUIDs, more fast
     # TODO get uuids from file as approach to speedup UUIDs generation
-    
+
     uuids = list()
     for _ in xrange(amount):
         u = str(uuid.uuid4()).replace('-', '')
-        uuids.append(("%040s" % u).replace(' ','0'))
+        uuids.append(("%040s" % u).replace(' ', '0'))
     return uuids
 
 # -----------------------------------------------------------------
 # CollectionManager class
 # -----------------------------------------------------------------
+
+
 class CollectionManager(object):
+
     ''' Collection Manager'''
-    
+
     def __init__(self, uri):
-    
+
         self.backend_manager = None
-        
+
         if not uri or uri.find('://') <= 0:
             raise RuntimeError('Incorrect URI definition: {}'.format(uri))
         backend, rest_uri = uri.split('://')
@@ -192,21 +203,21 @@ class CollectionManager(object):
     def create(self, name):
         ''' create collection '''
         self.backend_manager.create(name)
-    
+
     @property
     def collection_class(self):
         ''' return object MysqlCollection or SqliteCollection '''
         return self.backend_manager.collection_class
-    
+
     @property
     def connection(self):
         ''' return reference to backend connection '''
         return self.backend_manager.connection
-    
+
     def collections(self):
         ''' return list of collections '''
         return self.backend_manager.collections()
-    
+
     def remove(self, name):
         ''' remove collection '''
         self.backend_manager.remove(name)
@@ -214,32 +225,43 @@ class CollectionManager(object):
 # -----------------------------------------------------------------
 # BaseCollectionManager class
 # -----------------------------------------------------------------
+
+
 class BaseCollectionManager(object):
 
-    def __init__(self, connection):
+    def __init__(self, uri):
         ''' init '''
-        self._conn = connection
-        self._cursor = self._conn.cursor()
+        self.uri = uri
+        self.params = self.parse_uri(uri)
+        self.conn()
+
+    def cursor(self):
+        self._reconn()
+        return self._conn.cursor()
 
     @property
     def connection(self):
         ''' return connection '''
+        self._reconn()
         return self._conn
-    
+
     def _collections(self, sql):
         ''' return collection list'''
-        self._cursor.execute(sql)
-        return [t[0] for t in self._cursor.fetchall()]
+        cursor = self.cursor()
+        cursor.execute(sql)
+        return [t[0] for t in cursor.fetchall()]
 
     def _create(self, sql_create_table, name):
         ''' create collection by name '''
-        self._cursor.execute(sql_create_table % name)
+        cursor = self.cursor()
+        cursor.execute(sql_create_table % name)
         self._conn.commit()
 
     def remove(self, name):
         ''' remove collection '''
+        cursor = self.cursor()
         if name in self.collections():
-            self._cursor.execute('DROP TABLE %s;' % name)
+            cursor.execute('DROP TABLE %s;' % name)
             self._conn.commit()
         else:
             raise RuntimeError('No collection with name: {}'.format(name))
@@ -247,38 +269,53 @@ class BaseCollectionManager(object):
     def close(self):
         ''' close connection to database '''
         self._conn.close()
-        
+
 # -----------------------------------------------------------------
 # MysqlCollectionManager class
 # -----------------------------------------------------------------
+
+
 class MysqlCollectionManager(BaseCollectionManager):
-    ''' MysqlCollectionManager '''
-    
-    def __init__(self, uri):
-        
-        params = self.parse_uri(uri) 
-        
+
+    def _reconn(self, num=28800, stime=3):
+        _number = 0
+        _status = True
+        while _status and _number <= num:
+            try:
+                self._conn.ping()  # cping 校验连接是否异常
+                _status = False
+            except:
+                if self.conn() == True:  # 重新连接,成功退出
+                    _status = False
+                    break
+                _number += 1
+                logging.error('connection to mysql %s fail', self.uri)
+                time.sleep(stime)
+
+    def conn(self):
+        params = self.params
         try:
             self._conn = MySQLdb.connect(
-                                host=params['host'], port = params['port'], 
-                                user=params['username'], passwd=params['password'], 
-                                db=params['db'])
-        except MySQLdb.OperationalError,err:
-            raise RuntimeError(err)
-        
-        super(MysqlCollectionManager, self).__init__(self._conn)
+                host=params['host'], port=params['port'],
+                user=params['username'], passwd=params[
+                    'password'],
+                db=params['db'])
+            return True
+        except MySQLdb.OperationalError, err:
+            pass
+        return False
 
     @staticmethod
     def parse_uri(uri):
-        '''parse URI 
-        
+        '''parse URI
+
         return driver, user, password, host, port, database, table
         '''
         parsed_uri = dict()
         parsed_uri['backend'], rest_uri = uri.split('://', 1)
         parsed_uri['username'], rest_uri = rest_uri.split(':', 1)
         parsed_uri['password'], rest_uri = rest_uri.split('@', 1)
-        
+
         if ':' in rest_uri:
             parsed_uri['host'], rest_uri = rest_uri.split(':', 1)
             parsed_uri['port'], rest_uri = rest_uri.split('/', 1)
@@ -288,28 +325,28 @@ class MysqlCollectionManager(BaseCollectionManager):
             parsed_uri['port'] = 3306
 
         if '.' in rest_uri:
-            parsed_uri['db'], parsed_uri['collection'] = rest_uri.split('.', 1)     
+            parsed_uri['db'], parsed_uri['collection'] = rest_uri.split('.', 1)
         else:
             parsed_uri['db'] = rest_uri
             parsed_uri['collection'] = None
         return parsed_uri
-        
+
     def create(self, name):
         ''' create collection '''
 
         SQL_CREATE_TABLE = '''CREATE TABLE IF NOT EXISTS %%s (
                                 __rowid__ INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                                k varchar(%s) NOT NULL, 
+                                k varchar(%s) NOT NULL,
                                 v MEDIUMBLOB,
                                 UNIQUE KEY (k) ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;;''' % MAX_KEY_LENGTH
-                                
+
         self._create(SQL_CREATE_TABLE, name)
 
     @property
     def collection_class(self):
         ''' return MysqlCollection object'''
         return MysqlCollection
-    
+
     def collections(self):
         ''' return collection list'''
         return self._collections('SHOW TABLES;')
@@ -317,26 +354,27 @@ class MysqlCollectionManager(BaseCollectionManager):
 # -----------------------------------------------------------------
 # SqliteCollectionManager class
 # -----------------------------------------------------------------
-class SqliteCollectionManager(BaseCollectionManager):
-    ''' Sqlite Collection Manager '''
-    def __init__(self, uri):
-        
-        params = self.parse_uri(uri) 
-        self._conn = sqlite3.connect(params['db'])       
-        self._conn.text_factory = str
 
-        super(SqliteCollectionManager, self).__init__(self._conn)
+
+class SqliteCollectionManager(BaseCollectionManager):
+    def _reconn(self):
+        return True
+
+    def conn(self):
+        self._conn = sqlite3.connect(self.params['db'])
+        self._conn.text_factory = str
+        return True
 
     @staticmethod
     def parse_uri(uri):
-        '''parse URI 
-        
+        '''parse URI
+
         return driver, database, collection
         '''
         parsed_uri = dict()
         parsed_uri['backend'], rest_uri = uri.split('://', 1)
         if ':' in rest_uri:
-            parsed_uri['db'], parsed_uri['collection'] = rest_uri.split(':',1)
+            parsed_uri['db'], parsed_uri['collection'] = rest_uri.split(':', 1)
         else:
             parsed_uri['db'] = rest_uri
             parsed_uri['collection'] = None
@@ -367,35 +405,42 @@ class SqliteCollectionManager(BaseCollectionManager):
 # -----------------------------------------------------------------
 class BaseCollection(object):
 
-    def __init__(self, connection, collection_name, serializer=cPickleSerializer):
+    def __init__(self, manager, collection_name, serializer=cPickleSerializer):
 
-        self._conn = connection
-        self._cursor = self._conn.cursor()
+        self._manager = manager
         self._collection = collection_name
         self._serializer = serializer
 
         self._uuid_cache = list()
 
+    def cursor(self):
+        return self._manager.cursor()
+
+    @property
+    def _conn(self):
+        return self._manager.connection
+
     @property
     def count(self):
         ''' return amount of documents in collection'''
-        self._cursor.execute('SELECT count(*) FROM %s;' % self._collection)
-        return int(self._cursor.fetchone()[0])
+        cursor = self.cursor()
+        cursor.execute('SELECT count(*) FROM %s;' % self._collection)
+        return int(cursor.fetchone()[0])
 
     def exists(self, k):
+        cursor = self.cursor()
         SQL = 'SELECT count(*) FROM %s WHERE k = ' % self._collection
         try:
-            self._cursor.execute(SQL + "%s", k)
+            cursor.execute(SQL + "%s", k)
         except Exception, err:
             raise RuntimeError(err)
-        result = self._cursor.fetchone()
+        result = cursor.fetchone()
         if result:
             return int(result[0])
         else:
             return 0
 
     __contains__ = exists
-        
 
     def commit(self):
         self._conn.commit()
@@ -406,41 +451,41 @@ class BaseCollection(object):
             self.commit()
             self._conn.close()
 
-    __del__ = close
-    
 
-
-    
 # -----------------------------------------------------------------
 # MysqlCollection class
 # -----------------------------------------------------------------
 class MysqlCollection(BaseCollection):
+
     ''' Mysql Connection '''
 
     def get_uuid(self):
-        """ 
-        if mysql connection is available more fast way to use this method 
+        """
+        if mysql connection is available more fast way to use this method
         than global function - get_uuid()
-        
+
         return id based on uuid """
 
         if not self._uuid_cache:
-            self._cursor.execute('SELECT %s;' % ','.join(['uuid()' for _ in range(100)]))
-            for uuid in self._cursor.fetchone():
+            cursor = self.cursor()
+            cursor.execute('SELECT %s;' % ','.join(
+                ['uuid()' for _ in range(100)]))
+            for uuid in cursor.fetchone():
                 u = uuid.split('-')
                 u.reverse()
-                u = ("%040s" % ''.join(u)).replace(' ','0')
+                u = ("%040s" % ''.join(u)).replace(' ', '0')
                 self._uuid_cache.append(u)
         return self._uuid_cache.pop()
 
     def items(self):
         ''' return all docs '''
         rowid = 0
+        cursor = self.cursor()
         while True:
             SQL_SELECT_MANY = 'SELECT __rowid__, k,v FROM %s WHERE __rowid__ > %d LIMIT 1000 ;'
-            SQL_SELECT_MANY %=  (self._collection, rowid)
-            self._cursor.execute(SQL_SELECT_MANY)
-            result = self._cursor.fetchall()
+            SQL_SELECT_MANY %= (self._collection, rowid)
+            cursor.execute(SQL_SELECT_MANY)
+            result = cursor.fetchall()
             if not result:
                 break
             for r in result:
@@ -453,52 +498,58 @@ class MysqlCollection(BaseCollection):
                 yield (k, v)
 
     def get(self, k, default=None):
-        ''' 
-        return document by key from collection 
+        '''
+        return document by key from collection
         '''
         if len(k) > MAX_KEY_LENGTH:
-            raise RuntimeError('The key length is more than %s bytes' % MAX_KEY_LENGTH)
+            raise RuntimeError(
+                'The key length is more than %s bytes' % MAX_KEY_LENGTH)
         SQL = 'SELECT k,v FROM %s WHERE k = ' % self._collection
+        cursor = self.cursor()
         try:
-            self._cursor.execute(SQL + "%s", k)
+            cursor.execute(SQL + "%s", k)
         except Exception, err:
             raise RuntimeError(err)
-        result = self._cursor.fetchone()
+        result = cursor.fetchone()
         if result:
             v = self._serializer.loads(result[1])
             return v
         else:
             return default
-             
 
     def put(self, k, v):
         ''' put document in collection '''
-        
+
         # TODO many k/v in put()
-        
+
         if len(k) > MAX_KEY_LENGTH:
-            raise RuntimeError('The length of key is more than %s bytes' % MAX_KEY_LENGTH)
+            raise RuntimeError(
+                'The length of key is more than %s bytes' % MAX_KEY_LENGTH)
         SQL_INSERT = 'INSERT INTO %s (k,v) ' % self._collection
         SQL_INSERT += 'VALUES (%s,%s) ON DUPLICATE KEY UPDATE v=%s;;'
         v = self._serializer.dumps(v)
-        self._cursor.execute(SQL_INSERT, (k, v, v))
+        cursor = self.cursor()
+        cursor.execute(SQL_INSERT, (k, v, v))
 
     def delete(self, k):
         ''' delete document by k '''
         if len(k) > MAX_KEY_LENGTH:
-            raise RuntimeError('The length of key is more than %s bytes' % MAX_KEY_LENGTH)
+            raise RuntimeError(
+                'The length of key is more than %s bytes' % MAX_KEY_LENGTH)
 
         SQL_DELETE = '''DELETE FROM %s WHERE k = ''' % self._collection
-        self._cursor.execute(SQL_DELETE + "%s;", k)
+        cursor = self.cursor()
+        cursor.execute(SQL_DELETE + "%s;", k)
 
     def keys(self):
         ''' return document keys in collection'''
         rowid = 0
+        cursor = self.cursor()
         while True:
             SQL_SELECT_MANY = 'SELECT __rowid__, k FROM %s WHERE __rowid__ > %d LIMIT 1000 ;'
             SQL_SELECT_MANY %= (self._collection, rowid)
-            self._cursor.execute(SQL_SELECT_MANY)
-            result = self._cursor.fetchall()
+            cursor.execute(SQL_SELECT_MANY)
+            result = cursor.fetchall()
             if not result:
                 break
             for r in result:
@@ -516,8 +567,9 @@ class MysqlCollection(BaseCollection):
 # SqliteCollection class
 # -----------------------------------------------------------------
 class SqliteCollection(BaseCollection):
+
     ''' Sqlite Collection'''
-    
+
     def get_uuid(self):
         """ return id based on uuid """
 
@@ -528,24 +580,27 @@ class SqliteCollection(BaseCollection):
 
     def put(self, k, v):
         ''' put document in collection '''
-        
+
         # TODO many k/v in put()
-        
+
         if len(k) > MAX_KEY_LENGTH:
-            raise RuntimeError('The length of key is more than %s bytes', MAX_KEY_LENGTH)
+            raise RuntimeError(
+                'The length of key is more than %s bytes', MAX_KEY_LENGTH)
+        cursor = self.cursor()
         SQL_INSERT = 'INSERT OR REPLACE INTO %s (k,v) ' % self._collection
         SQL_INSERT += 'VALUES (?,?)'
         v = self._serializer.dumps(v)
-        self._cursor.execute(SQL_INSERT, (k, v))
+        cursor.execute(SQL_INSERT, (k, v))
 
     def items(self):
         ''' return all docs '''
         rowid = 0
+        cursor = self.cursor()
         while True:
             SQL_SELECT_MANY = 'SELECT rowid, k,v FROM %s WHERE rowid > %d LIMIT 1000 ;'
             SQL_SELECT_MANY %= (self._collection, rowid)
-            self._cursor.execute(SQL_SELECT_MANY)
-            result = self._cursor.fetchall()
+            cursor.execute(SQL_SELECT_MANY)
+            result = cursor.fetchall()
             if not result:
                 break
             for r in result:
@@ -558,18 +613,20 @@ class SqliteCollection(BaseCollection):
                 yield (k, v)
 
     def get(self, k):
-        ''' 
-        return document by key from collection 
+        '''
+        return document by key from collection
         return documents if key is not defined
         '''
         if len(k) > MAX_KEY_LENGTH:
-            raise RuntimeError('The key length is more than %s bytes', MAX_KEY_LENGTH)
+            raise RuntimeError(
+                'The key length is more than %s bytes', MAX_KEY_LENGTH)
         SQL = 'SELECT k,v FROM %s WHERE k = ?;' % self._collection
+        cursor = self.cursor()
         try:
-            self._cursor.execute(SQL, (k,))
+            cursor.execute(SQL, (k,))
         except Exception, err:
             raise RuntimeError(err)
-        result = self._cursor.fetchone()
+        result = cursor.fetchone()
         if result:
             try:
                 v = self._serializer.loads(result[1])
@@ -577,16 +634,17 @@ class SqliteCollection(BaseCollection):
                 raise RuntimeError('key %s, %s' % (k, err))
             return v
         else:
-            return None  
+            return None
 
     def keys(self):
         ''' return document keys in collection'''
         rowid = 0
+        cursor = self.cursor()
         while True:
             SQL_SELECT_MANY = 'SELECT rowid, k FROM %s WHERE rowid > %d LIMIT 1000 ;'
             SQL_SELECT_MANY %= (self._collection, rowid)
-            self._cursor.execute(SQL_SELECT_MANY)
-            result = self._cursor.fetchall()
+            cursor.execute(SQL_SELECT_MANY)
+            result = cursor.fetchall()
             if not result:
                 break
             for r in result:
@@ -596,12 +654,15 @@ class SqliteCollection(BaseCollection):
     def delete(self, k):
         ''' delete document by k '''
         if len(k) > MAX_KEY_LENGTH:
-            raise RuntimeError('The key length is more than %s bytes' % MAX_KEY_LENGTH)
+            raise RuntimeError(
+                'The key length is more than %s bytes' % MAX_KEY_LENGTH)
         SQL_DELETE = '''DELETE FROM %s WHERE k = ?;''' % self._collection
-        self._cursor.execute(SQL_DELETE, (k,))
-                    
+        self.cursor().execute(SQL_DELETE, (k,))
+
+    def close(self):
+        self._conn.close()
+
     __getitem__ = get
     __iter__ = items
     __setitem__ = put
     __delitem__ = delete
-

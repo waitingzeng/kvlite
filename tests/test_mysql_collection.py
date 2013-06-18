@@ -12,52 +12,54 @@ from kvlite import MysqlCollectionManager
 from kvlite import cPickleSerializer
 from kvlite import CompressedJsonSerializer
 
-URI = 'mysql://root:846266@localhost/yescustom'
+URI = 'mysql://root:846266@localhost/test'
+
+
 class KvliteMysqlTests(unittest.TestCase):
 
     def setUp(self):
         self.collection = kvlite.open(URI + '.kvlite_test')
         self.collection_name = 'kvlite_test'
-        return
         self.manager = MysqlCollectionManager(URI)
-        
+
         if self.collection_name not in self.manager.collections():
             self.manager.create(self.collection_name)
-            
+
         collection_class = self.manager.collection_class
-        self.collection = collection_class(self.manager.connection, self.collection_name)
+        self.collection = collection_class(
+            self.manager, self.collection_name)
 
     def tearDown(self):
-        
+
         if self.collection_name in self.manager.collections():
             self.manager.remove(self.collection_name)
         self.collection.close()
-    
+
     def test_mysql_get_uuid(self):
-        
+
         uuids = [self.collection.get_uuid() for i in range(1000)]
         self.assertEqual(len(set(uuids)), 1000)
 
     def test_put_get_delete_count_one(self):
-        
+
         k = self.collection.get_uuid()
         v = 'test_put_one'
         self.collection.put(k, v)
-        self.assertEqual(self.collection.get(k), (k,v))
+        self.assertEqual(self.collection.get(k), v)
         self.assertEqual(self.collection.count, 1)
         self.collection.delete(k)
         self.assertEqual(self.collection.count, 0)
         self.collection.commit()
 
     def test_put_get_delete_count_many(self):
-        
+
         ks = list()
         for i in xrange(100):
             k = self.collection.get_uuid()
             v = 'test_{}'.format(i)
             self.collection.put(k, v)
             ks.append(k)
-        
+
         kvs = [kv[0] for kv in self.collection]
         self.assertEqual(len(kvs), 100)
 
@@ -71,15 +73,16 @@ class KvliteMysqlTests(unittest.TestCase):
         self.collection.commit()
 
     def test_long_key(self):
-        
-        self.assertRaises(RuntimeError, self.collection.get, '1'*81)
-        self.assertRaises(RuntimeError, self.collection.put, '1'*81, 'long_key')
-        self.assertRaises(RuntimeError, self.collection.delete, '1'*81)
-    
+
+        self.assertRaises(RuntimeError, self.collection.get, '1' * 256)
+        self.assertRaises(
+            RuntimeError, self.collection.put, '1' * 256, 'long_key')
+        self.assertRaises(RuntimeError, self.collection.delete, '1' * 256)
+
     def test_absent_key(self):
-        
-        self.assertEqual(self.collection.get(u'a1b2c3'), (None,None))
-        
+
+        self.assertEqual(self.collection.get(u'a1b2c3'), None)
+
     def test_use_different_serializators_for_many(self):
         collection_name = 'diffser'
 
@@ -88,8 +91,9 @@ class KvliteMysqlTests(unittest.TestCase):
             manager.create(collection_name)
 
         collection_class = manager.collection_class
-        collection = collection_class(manager.connection, collection_name, CompressedJsonSerializer)
-        
+        collection = collection_class(
+            manager, collection_name, CompressedJsonSerializer)
+
         collection.put(u'11', u'diffser1')
         collection.put(u'22', u'diffser2')
         collection.put(u'33', u'diffser3')
@@ -98,10 +102,11 @@ class KvliteMysqlTests(unittest.TestCase):
 
         manager = MysqlCollectionManager(URI)
         collection_class = manager.collection_class
-        collection = collection_class(manager.connection, collection_name, cPickleSerializer)
+        collection = collection_class(
+            manager, collection_name, cPickleSerializer)
         with self.assertRaises(RuntimeError):
-            res = [(k,v) for k,v in collection]
-        
+            res = [(k, v) for k, v in collection]
+
         collection.put(u'11', u'diffser1')
         collection.put(u'22', u'diffser2')
         collection.put(u'open_id_aaaa', u'1111')
@@ -110,13 +115,13 @@ class KvliteMysqlTests(unittest.TestCase):
 
         manager = MysqlCollectionManager(URI)
         collection_class = manager.collection_class
-        collection = collection_class(manager.connection, collection_name, CompressedJsonSerializer)
-        
-        with self.assertRaises(RuntimeError):
-            res = [(k,v) for k,v in collection]
-        collection.close()
-        
-                
-if __name__ == '__main__':
-    unittest.main()        
+        collection = collection_class(
+            manager, collection_name, CompressedJsonSerializer)
 
+        with self.assertRaises(RuntimeError):
+            res = [(k, v) for k, v in collection]
+        collection.close()
+
+
+if __name__ == '__main__':
+    unittest.main()

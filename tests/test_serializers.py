@@ -1,7 +1,7 @@
 import sys
 if '' not in sys.path:
     sys.path.append('')
-
+sys.path.append('..')
 import unittest
 
 from kvlite import cPickleSerializer as cps

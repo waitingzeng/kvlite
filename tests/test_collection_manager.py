@@ -1,9 +1,10 @@
 import sys
 if '' not in sys.path:
     sys.path.append('')
+sys.path.append('../')
 
 import unittest
-
+import MySQLdb
 from kvlite import CollectionManager
 
 class KvliteCollectionManagerTests(unittest.TestCase):
@@ -15,7 +16,7 @@ class KvliteCollectionManagerTests(unittest.TestCase):
 
     def test_mysql_manager(self):
         
-        URI = 'mysql://kvlite_test:eixaaghiequ6ZeiBahn0@localhost/kvlite_test'
+        URI = 'mysql://root:846266@localhost/test'
         collection_name = 'kvlite_test'
         
         manager = CollectionManager(URI)
@@ -33,7 +34,7 @@ class KvliteCollectionManagerTests(unittest.TestCase):
 
     def test_sqlite_manager(self):
         
-        URI = 'sqlite://tests/db/testdb.sqlite'
+        URI = 'sqlite:///tmp/testdb.sqlite'
         collection_name = 'kvlite_test'
         
         manager = CollectionManager(URI)
