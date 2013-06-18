@@ -48,7 +48,7 @@ class KvliteSqliteTests(unittest.TestCase):
         ks = list()
         for i in xrange(100):
             k = self.collection.get_uuid()
-            v = 'test_{}'.format(i)
+            v = 'test_{0}'.format(i)
             self.collection.put(k, v)
             ks.append(k)
         

@@ -147,7 +147,7 @@ def open(uri, serializer=cPickleSerializer):
     params = manager.parse_uri(uri)
     if params['collection'] not in manager.collections():
         manager.create(params['collection'])
-    return manager.collection_class(manager, params['collection'], serializer)
+    return manager.collection_class(manager.backend_manager, params['collection'], serializer)
 
 
 def remove(uri):
